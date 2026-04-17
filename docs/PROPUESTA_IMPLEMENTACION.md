@@ -7,7 +7,7 @@
 **Fecha:** Abril 2026  
 **Autor:** Equipo de Arquitectura  
 **Estado:** Propuesta Técnica  
-**Stack:** Node.js, TypeScript, PostgreSQL, Clean Architecture
+**Stack:** Node.js, TypeScript, MySQL, Clean Architecture
 
 ---
 
@@ -98,13 +98,13 @@ node "API Gateway" {
 
 node "Kubernetes Cluster" {
     rectangle "API REST\n(Node.js/Express)" as API
-    rectangle "Worker\n(BullMQ)" as Worker
+    rectangle "Worker\n(Bull (Redis-based, Node.js native))" as Worker
     
-    database "PostgreSQL\n(Primary)" as PG
+    database "MySQL\n(Primary)" as PG
     database "Redis\n(Cache/Sessions)" as Redis
-    database "Elasticsearch\n(Búsqueda)" as ES
+    database "MySQL FULLTEXT Search\n(Búsqueda)" as ES
     
-    queue "RabbitMQ\n(Event Bus)" as MQ
+    queue "EventEmitter2 (Node.js EventEmitter)\n(Event Bus)" as MQ
 }
 
 rectangle "msseguridad" as Auth
@@ -157,28 +157,28 @@ Worker --> Email : "Send"
 │  ├─ Repositories (TypeORM implementations)                     │
 │  ├─ Adapters (TaxValidationAdapter, EmailAdapter)              │
 │  ├─ External APIs (VIES, GoogleMaps, Clearbit)                │
-│  ├─ Messaging (RabbitMQ Publisher/Consumer)                    │
+│  ├─ Messaging (EventEmitter2 (Node.js EventEmitter) Publisher/Consumer)                    │
 │  └─ Config (Database, Redis, Environment)                     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### 3.2 Stack Tecnológico
 
-| Capa | Tecnología | Versión |
-|------|------------|---------|
-| **Runtime** | Node.js | 20 LTS |
-| **Lenguaje** | TypeScript | 5.x |
-| **Framework** | Express.js | 4.x |
-| **Base de Datos** | PostgreSQL | 15+ |
-| **ORM** | TypeORM | 0.3.x |
-| **Caché** | Redis | 7 |
-| **Búsqueda** | Elasticsearch | 8.x |
-| **Colas** | RabbitMQ | 3.x |
-| **Jobs** | BullMQ | 4.x |
-| **Documentos** | S3 / MinIO | - |
-| **Testing** | Jest | 29.x |
-| **Validación** | class-validator | 0.14.x |
-| **Documentación** | Swagger/OpenAPI | 3.x |
+| Capa | Tecnología | Versión | Notas |
+|------|------------|---------|-------|
+| **Runtime** | Node.js | 20 LTS | |
+| **Lenguaje** | TypeScript | 5.x | |
+| **Framework** | Express.js | 4.x | |
+| **Base de Datos** | MySQL | 8.0+ | Consistente con msseguridad |
+| **ORM** | TypeORM | 0.3.x | Mismo ORM, misma versión |
+| **Caché** | Redis | 7 | Reutilizar infra existente |
+| **Búsqueda** | **MySQL FULLTEXT** | 8.0+ | Nativo de MySQL, no requiere servicio extra |
+| **Mensajería** | **EventEmitter2** | 6.x | Nativo Node.js, pub/sub interno |
+| **Jobs/Colas** | **Bull** | 4.x | Basado en Redis (ya tenemos Redis) |
+| **Documentos** | S3 / MinIO | - | |
+| **Testing** | Jest | 29.x | |
+| **Validación** | class-validator | 0.14.x | |
+| **Documentación** | Swagger/OpenAPI | 3.x | |
 
 ### 3.3 Flujo de Datos
 
@@ -206,10 +206,10 @@ X-User-Id, X-User-Roles;
 :Generate Domain Events;
 
 |Infrastructure|
-:Persist to PostgreSQL;
-:Publish Events to RabbitMQ;
+:Persist to MySQL;
+:Publish Events via EventEmitter2 (Node.js native);
 :Cache in Redis;
-:Index in Elasticsearch;
+:Index in MySQL FULLTEXT;
 
 |msclientes API|
 :Build Response DTO;
@@ -497,7 +497,7 @@ paths:
 
   /customers/search:
     get:
-      summary: Búsqueda avanzada (Elasticsearch)
+      summary: Búsqueda avanzada (MySQL FULLTEXT Search)
       tags: [Search]
       parameters:
         - name: q
@@ -650,7 +650,7 @@ start
 :Generar JWT;
 :Emitir evento user.registered;
 
-|RabbitMQ|
+|EventEmitter2 (Node.js EventEmitter)|
 :Queue: user.events;
 
 |msclientes|
@@ -757,7 +757,7 @@ stop
 
 | Medida | Implementación |
 |--------|----------------|
-| **Encriptación en reposo** | AES-256 para campos PII (PostgreSQL pgcrypto) |
+| **Encriptación en reposo** | AES-256 para campos PII (MySQL pgcrypto) |
 | **Encriptación en tránsito** | TLS 1.3 obligatorio |
 | **Tokenización** | Datos bancarios → Vault (HashiCorp/AWS KMS) |
 | **Masking** | Logs con datos sensibles enmascarados |
@@ -800,7 +800,7 @@ Q2 2026 (3 meses)          Q3 2026 (3 meses)          Q4 2026 (2 meses)
 ### 8.2 Fases Detalladas
 
 #### FASE 1: Setup y Core (Semanas 1-3)
-- [ ] Scaffolding del proyecto (Node.js, TypeORM, PostgreSQL)
+- [ ] Scaffolding del proyecto (Node.js, TypeORM, MySQL)
 - [ ] Configuración Docker Compose local
 - [ ] Integración con msseguridad (JWT validation)
 - [ ] CRUD completo de customers
@@ -812,12 +812,12 @@ Q2 2026 (3 meses)          Q3 2026 (3 meses)          Q4 2026 (2 meses)
 - [ ] Validación externa de tax IDs
 - [ ] Upload de documentos (S3/MinIO)
 - [ ] Workflow de verificación de documentos
-- [ ] Eventos asíncronos (RabbitMQ setup)
+- [ ] Eventos asíncronos (EventEmitter2 (Node.js EventEmitter) setup)
 
 #### FASE 3: Segmentación y Búsqueda (Semanas 6-7)
 - [ ] Sistema de tags flexible
 - [ ] Segmentación automática (reglas)
-- [ ] Integración Elasticsearch
+- [ ] Integración MySQL FULLTEXT Search
 - [ ] Búsqueda full-text avanzada
 - [ ] Scoring básico de clientes
 
@@ -842,8 +842,8 @@ Q2 2026 (3 meses)          Q3 2026 (3 meses)          Q4 2026 (2 meses)
 | CRUD Customers | Setup proyecto | 3 días |
 | Direcciones | CRUD Customers | 2 días |
 | Validación Tax | Direcciones, API externa | 3 días |
-| Elasticsearch | CRUD Customers, infra ES | 4 días |
-| Eventos RabbitMQ | Setup messaging | 2 días |
+| MySQL FULLTEXT Search | CRUD Customers, infra ES | 4 días |
+| Eventos EventEmitter2 (Node.js EventEmitter) | Setup messaging | 2 días |
 | GDPR features | Audit logging | 3 días |
 
 ### 8.4 Estimación de Esfuerzo
@@ -872,9 +872,9 @@ participant "msclientes API" as API
 participant "CustomerService" as Service
 participant "TaxValidationAdapter" as TaxAdapter
 participant "CustomerRepository" as Repo
-participant "RabbitMQ" as MQ
-participant "PostgreSQL" as DB
-participant "Elasticsearch" as ES
+participant "EventEmitter2 (Node.js EventEmitter)" as MQ
+participant "MySQL" as DB
+participant "MySQL FULLTEXT Search" as ES
 
 Agent -> Gateway: POST /customers
 Gateway -> Gateway: Validate JWT
@@ -933,10 +933,10 @@ DB_PASSWORD=secret
 REDIS_HOST=localhost
 REDIS_PORT=6379
 
-# Elasticsearch
+# MySQL FULLTEXT Search
 ES_HOST=http://localhost:9200
 
-# RabbitMQ
+# EventEmitter2 (Node.js EventEmitter)
 RABBITMQ_URL=amqp://localhost:5672
 
 # External APIs
